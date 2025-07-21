@@ -16,10 +16,8 @@ jobs:
           python-version: "3.12"
       - name: Install Poetry
         run: pip install poetry
-      - name: Install deps
-        run: |
-          poetry install --only main --no-root
-          poetry add --group dev pytest ruff
+      - name: Install dependencies
+        run: poetry install --no-root
       - name: Ruff lint
         run: poetry run ruff .
       - name: Pytest
