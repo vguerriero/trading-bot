@@ -16,3 +16,5 @@ credentials:
     live_secret: ${ALPACA_LIVE_SECRET}
 logging:
   log_level: "INFO"
+storage:
+  audit_bucket_arn: "arn:aws:s3:::trade-logs-archive-XXXXXXXX"
