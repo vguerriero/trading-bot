@@ -1,0 +1,2 @@
+| Date (UTC) | Git Commit | Model/File | Reason for change | Key metrics before | Key metrics after | Approved by |
+|------------|-----------|------------|-------------------|--------------------|-------------------|-------------|
