@@ -1,0 +1,18 @@
+# -----------------------------------------------------------------------------
+# Global configuration – edit targets, risk caps, and runtime flags here.
+# -----------------------------------------------------------------------------
+trading:
+  daily_goal_usd: 100        # ← your initial profit target
+  max_daily_drawdown_pct: 2  # bot stops if equity falls this % intraday
+  live_trading: false        # switch to true ONLY after Phase 12
+data:
+  symbols_universe: ["AAPL", "MSFT", "NVDA", "AMD"]   # starter set
+  market_data_plan: "Basic"
+credentials:
+  alpaca:
+    paper_key:   ${ALPACA_PAPER_KEY}
+    paper_secret:${ALPACA_PAPER_SECRET}
+    live_key:    ${ALPACA_LIVE_KEY}
+    live_secret: ${ALPACA_LIVE_SECRET}
+logging:
+  log_level: "INFO"
