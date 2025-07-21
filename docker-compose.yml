@@ -1,4 +1,3 @@
-version: "3.9"
 
 services:
   # ---------- Data Layer ----------
@@ -41,7 +40,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    command: ["python", "-m", "ingest.dummy"]
+    command: ["python", "-u", "-m", "ingest.dummy"]
     depends_on: [feature_store, redis]
     env_file: .env.compose
 
