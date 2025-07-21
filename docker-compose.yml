@@ -1,0 +1,50 @@
+version: "3.9"
+
+services:
+  # ---------- Data Layer ----------
+  feature_store:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    env_file: .env.compose
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+
+  # ---------- Monitoring ----------
+  prometheus:
+    image: prom/prometheus:v2.52.0
+    volumes:
+      - ./ops/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+    ports:
+      - "9090:9090"
+
+  grafana:
+    image: grafana/grafana:11.0.0
+    env_file: .env.compose
+    depends_on: [prometheus]
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+
+  # ---------- Ingestor skeleton ----------
+  ingestor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["python", "-m", "ingest.dummy"]
+    depends_on: [feature_store, redis]
+    env_file: .env.compose
+
+volumes:
+  pg_data:
+  grafana_data:
