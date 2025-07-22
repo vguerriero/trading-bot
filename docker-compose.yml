@@ -72,7 +72,6 @@ services:
     env_file: .env.compose
     environment:
       - AWS_REGION=us-east-1
-      - AWS_PROFILE=tradingbot        # <‑‑ tells boto3 which profile to use
     volumes:
       # mounts host AWS credentials into /root/.aws inside container
       - /home/trader/.aws:/root/.aws:ro
