@@ -71,6 +71,11 @@ services:
       - feature_store
       - redis
     env_file: .env.compose
+    environment:
+      - AWS_REGION=us-east-1
+    volumes:
+      # mounts host AWS credentials into /root/.aws inside container
+      - /home/trader/.aws:/root/.aws:ro
 
 volumes:
   pg_data:
