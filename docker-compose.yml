@@ -1,3 +1,5 @@
+version: "3.9"
+
 services:
   # ---------- Data Layer ----------
   feature_store:
@@ -38,6 +40,24 @@ services:
     volumes:
       - grafana_data:/var/lib/grafana
 
+  # ---------- Host Metrics Exporter ----------
+  node_exporter:
+    image: prom/node-exporter:v1.8.1
+    network_mode: host
+    pid: host
+    restart: unless-stopped
+
+  # ---------- Docker‑container Metrics ----------
+  cadvisor:
+    image: gcr.io/google-containers/cadvisor:v0.47.1
+    network_mode: host
+    restart: unless-stopped
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+
   # ---------- Ingestor skeleton ----------
   ingestor:
     build:
@@ -52,13 +72,6 @@ services:
       - feature_store
       - redis
     env_file: .env.compose
-
-  # ---------- Host Metrics Exporter ----------
-  node_exporter:
-    image: prom/node-exporter:v1.8.1
-    network_mode: host
-    pid: host
-    restart: unless-stopped
 
 volumes:
   pg_data:
