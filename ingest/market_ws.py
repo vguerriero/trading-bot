@@ -1,58 +1,53 @@
 import os
-import asyncio
 import asyncpg
 from alpaca.data.live import StockDataStream
 from ops.secret_loader import load_secrets
 
-# Load secrets from AWS SSM into environment
+# ----------------------------------------------------------------------
+# 1. Load secrets and basic settings
+# ----------------------------------------------------------------------
 load_secrets()
 
-# Database connection string
-DB_DSN = "postgresql://trader:trader_pw@feature_store:5432/trading"
-# Symbols to subscribe to (comma-separated in ENV)
-SYMBOLS = os.getenv("SYMBOL_UNIVERSE", "AAPL,MSFT,NVDA,AMD").split(",")
+DB_DSN   = "postgresql://trader:trader_pw@feature_store:5432/trading"
+SYMBOLS  = os.getenv("SYMBOL_UNIVERSE", "AAPL,MSFT,NVDA,AMD").split(",")
 
-def main():
-    # Create and set a dedicated event loop
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+API_KEY  = os.environ["ALPACA_PAPER_KEY"]
+API_SEC  = os.environ["ALPACA_PAPER_SECRET"]
 
-    # Initialize asyncpg connection pool
-    pool = loop.run_until_complete(
-        asyncpg.create_pool(DB_DSN, min_size=1, max_size=4)
-    )
+# ----------------------------------------------------------------------
+# 2. Lazy‑initialised async‑pg pool (created on first quote)
+# ----------------------------------------------------------------------
+_pg_pool = None
+INSERT_SQL = """
+    INSERT INTO ticks(ts, symbol, bid, ask, last, size)
+    VALUES($1,$2,$3,$4,$5,$6)
+    ON CONFLICT DO NOTHING
+"""
 
-    # Initialize Alpaca WebSocket stream
-    stream = StockDataStream(
-        os.environ["ALPACA_PAPER_KEY"],
-        os.environ["ALPACA_PAPER_SECRET"]
-    )
+async def quote_handler(q):
+    """Runs inside Alpaca’s event loop; writes each quote to Postgres."""
+    global _pg_pool
+    if _pg_pool is None:                       # create pool only once
+        _pg_pool = await asyncpg.create_pool(DB_DSN, min_size=1, max_size=4)
 
-    # Handler schedules insert tasks onto our event loop
-    def handler(q):
-        loop.create_task(
-            pool.execute(
-                """
-                INSERT INTO ticks(ts, symbol, bid, ask, last, size)
-                VALUES($1, $2, $3, $4, $5, $6)
-                ON CONFLICT DO NOTHING
-                """,
-                q.timestamp,
-                q.symbol,
-                q.bid_price,
-                q.ask_price,
-                q.last_price,
-                q.size
-            )
+    async with _pg_pool.acquire() as con:
+        await con.execute(
+            INSERT_SQL,
+            q.timestamp,
+            q.symbol,
+            q.bid_price,
+            q.ask_price,
+            q.last_price,
+            q.size,
         )
 
-    # Subscribe to quote updates for each symbol
-    for sym in SYMBOLS:
-        stream.subscribe_quotes(handler, sym)
-
-    # Run the stream (blocks forever, using our event loop)
-    stream.run()
-
+# ----------------------------------------------------------------------
+# 3. Wire up stream and block forever
+# ----------------------------------------------------------------------
+def main() -> None:
+    stream = StockDataStream(API_KEY, API_SEC)
+    stream.subscribe_quotes(quote_handler, *SYMBOLS)   # note *SYMBOLS
+    stream.run()                                       # blocking call
 
 if __name__ == "__main__":
     main()
