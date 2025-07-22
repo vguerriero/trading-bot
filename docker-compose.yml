@@ -30,6 +30,9 @@ services:
   grafana:
     image: grafana/grafana:11.0.0
     env_file: .env.compose
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=changeme
     depends_on:
       - prometheus
     ports:
