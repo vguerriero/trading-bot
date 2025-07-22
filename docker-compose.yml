@@ -1,5 +1,4 @@
-version: "3.9"
-
+# docker-compose.yml
 services:
   # ---------- Data Layer ----------
   feature_store:
@@ -47,9 +46,9 @@ services:
     pid: host
     restart: unless-stopped
 
-  # ---------- Docker‑container Metrics ----------
+  # ---------- Docker-container Metrics ----------
   cadvisor:
-    image: gcr.io/google-containers/cadvisor:v0.47.1
+    image: gcr.io/cadvisor/cadvisor:v0.52.1
     network_mode: host
     restart: unless-stopped
     volumes:
