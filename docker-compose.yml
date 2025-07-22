@@ -1,3 +1,4 @@
+version: "3.9"
 
 services:
   # ---------- Data Layer ----------
@@ -29,7 +30,8 @@ services:
   grafana:
     image: grafana/grafana:11.0.0
     env_file: .env.compose
-    depends_on: [prometheus]
+    depends_on:
+      - prometheus
     ports:
       - "3000:3000"
     volumes:
@@ -40,9 +42,22 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    command: ["python", "-u", "-m", "ingest.dummy"]
-    depends_on: [feature_store, redis]
+    command:
+      - "python"
+      - "-u"
+      - "-m"
+      - "ingest.dummy"
+    depends_on:
+      - feature_store
+      - redis
     env_file: .env.compose
+
+  # ---------- Host Metrics Exporter ----------
+  node_exporter:
+    image: prom/node-exporter:v1.8.1
+    network_mode: host
+    pid: host
+    restart: unless-stopped
 
 volumes:
   pg_data:
