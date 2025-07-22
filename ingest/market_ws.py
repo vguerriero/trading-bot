@@ -1,6 +1,6 @@
 import os
 import asyncpg
-from alpaca.data.live import CryptoDataStream
+from alpaca.data.live import StockDataStream
 from ops.secret_loader import load_secrets
 
 # ─── 1. Load secrets ─────────────────────────────────────────────────────────────
@@ -42,8 +42,8 @@ async def quote_handler(q):
 # ─── 3. Subscribe & run ─────────────────────────────────────────────────────────
 def main():
     print(f"→ market_ws starting, subscribing to {SYMBOLS}", flush=True)
-    stream = CryptoDataStream(API_KEY, API_SEC)
-    stream.subscribe_quotes(quote_handler, "BTCUSD")
+    stream = StockDataStream(API_KEY, API_SEC)
+    stream.subscribe_quotes(quote_handler, *SYMBOLS)
     stream.run()  # blocking
 
 if __name__ == "__main__":
