@@ -22,7 +22,7 @@ async def main():
     for sym in SYMBOLS:
         stream.subscribe_quotes(handler, sym)
 
-    await stream.run()
+    stream.run()
 
 if __name__ == "__main__":
     asyncio.run(main())
