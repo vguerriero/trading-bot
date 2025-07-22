@@ -1,20 +1,17 @@
 # syntax=docker/dockerfile:1.7
 FROM python:3.12-slim
-
-# Set working directory
 WORKDIR /app
 
-# Copy requirements and leverage pip cache for faster, more reliable installs
-COPY requirements.txt ./
+# 1️⃣ Copy only the poetry files first
+COPY pyproject.toml poetry.lock ./
 
-# Install dependencies with caching and increased timeouts
-# Requires BuildKit: set DOCKER_BUILDKIT=1 for cache mounts to work
-RUN pip install --no-cache-dir poetry && \
-    poetry config virtualenvs.create false && \
-    poetry install --only main --no-root
+# 2️⃣ Install Poetry & your dependencies (no-root avoids installing your package)
+RUN pip install --no-cache-dir poetry \
+ && poetry config virtualenvs.create false \
+ && poetry install --only main --no-root
 
-# Copy the rest of the application code
+# 3️⃣ Copy the rest of your code
 COPY . .
 
-# Default command to run the orchestration module
+# 4️⃣ Default entrypoint
 CMD ["python", "-m", "ops.main"]
