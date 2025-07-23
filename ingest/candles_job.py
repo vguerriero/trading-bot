@@ -8,70 +8,88 @@ from datetime import date, timedelta
 import alpaca_trade_api as tradeapi
 from ops.secret_loader import load_secrets
 
-async def store(df: pd.DataFrame, pool: asyncpg.Pool):
+
+async def store(df: pd.DataFrame, pool: asyncpg.Pool) -> None:
+    """Bulk‑upsert a DataFrame of daily bars into the candles table."""
     sql = """
     INSERT INTO candles(date, symbol, open, high, low, close, volume)
-    VALUES($1, $2, $3, $4, $5, $6, $7)
+    VALUES($1,$2,$3,$4,$5,$6,$7)
     ON CONFLICT (date, symbol) DO UPDATE
-      SET open      = EXCLUDED.open,
-          high      = EXCLUDED.high,
-          low       = EXCLUDED.low,
-          close     = EXCLUDED.close,
-          volume    = EXCLUDED.volume;
+      SET open   = EXCLUDED.open,
+          high   = EXCLUDED.high,
+          low    = EXCLUDED.low,
+          close  = EXCLUDED.close,
+          volume = EXCLUDED.volume;
     """
     async with pool.acquire() as conn:
-        records = [
-            (row.date, row.symbol, row.open, row.high, row.low, row.close, row.volume)
-            for row in df.itertuples(index=False)
-        ]
-        await conn.executemany(sql, records)
+        await conn.executemany(
+            sql,
+            [
+                (r.date, r.symbol, r.open, r.high, r.low, r.close, r.volume)
+                for r in df.itertuples(index=False)
+            ],
+        )
 
-async def run():
-    load_secrets()
 
-    # map secrets to alpaca_trade_api env vars
-    os.environ["APCA_API_KEY_ID"]     = os.environ["ALPACA_PAPER_KEY"]
-    os.environ["APCA_API_SECRET_KEY"] = os.environ["ALPACA_PAPER_SECRET"]
-    os.environ.setdefault(
-        "APCA_API_BASE_URL",
-        "https://paper-api.alpaca.markets"
+async def run() -> None:
+    """Back‑fill (or refresh) 1‑day candles for the configured symbol universe."""
+    load_secrets()  # pulls ALPACA_PAPER_KEY / _SECRET from SSM → env
+
+    key = os.getenv("ALPACA_PAPER_KEY")
+    sec = os.getenv("ALPACA_PAPER_SECRET")
+    if not key or not sec:
+        raise RuntimeError(
+            "ALPACA_PAPER_KEY / ALPACA_PAPER_SECRET env vars missing – "
+            "check secret_loader & AWS creds."
+        )
+
+    api = tradeapi.REST(
+        key_id=key,
+        secret_key=sec,
+        base_url="https://paper-api.alpaca.markets",
+        api_version="v2",
     )
 
-    api = tradeapi.REST()  # now picks up APCA_API_KEY_ID/SECRET
     symbols = os.getenv("SYMBOL_UNIVERSE", "AAPL,MSFT,NVDA,AMD").split(",")
     end = date.today()
-    start = end - timedelta(days=365*5)
+    start = end - timedelta(days=365 * 5)
 
     pool = await asyncpg.create_pool(
         "postgresql://trader:trader_pw@feature_store:5432/trading",
-        min_size=1, max_size=4
+        min_size=1,
+        max_size=4,
     )
 
     for sym in symbols:
-        print(f"▶️ Fetching {sym} from {start} to {end}", flush=True)
+        print(f"▶️ Fetching {sym} {start}→{end}", flush=True)
         try:
             barset = api.get_bars(
-                sym, "1Day",
+                sym,
+                "1Day",
                 start=start.isoformat(),
-                end=end.isoformat()
+                end=end.isoformat(),
+                limit=None,         # full range
+                adjustment="raw",
             ).df
-        except Exception as e:
-            print(f"❌ Error fetching {sym}: {e}", flush=True)
+        except Exception as exc:
+            print(f"❌ {sym}: {exc}", flush=True)
             continue
 
         if barset.empty:
-            print(f"⚠️ No data for {sym}", flush=True)
+            print(f"⚠️  No data returned for {sym}", flush=True)
             continue
 
         df = barset.reset_index()
-        idx_col = df.columns[0]  # timestamp column
-        df.rename(columns={idx_col: "date"}, inplace=True)
+        df.rename(columns={df.columns[0]: "date"}, inplace=True)  # first col is timestamp
         df["symbol"] = sym
         df = df[["date", "symbol", "open", "high", "low", "close", "volume"]]
 
         await store(df, pool)
+        print(f"✅ Stored {len(df):,} rows for {sym}", flush=True)
 
     await pool.close()
+    print("🏁 Candle back‑fill complete", flush=True)
+
 
 if __name__ == "__main__":
     asyncio.run(run())
