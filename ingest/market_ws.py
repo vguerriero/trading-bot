@@ -1,5 +1,6 @@
 import os
 from decimal import Decimal
+from alpaca.data.enums import DataFeed
 
 import asyncpg
 from alpaca.data.live import StockDataStream
@@ -52,7 +53,7 @@ async def quote_handler(q):
 # ─── 3. Subscribe & run ─────────────────────────────────────────────────────────
 def main():
     print(f"→ market_ws starting, subscribing to {SYMBOLS}", flush=True)
-    stream = StockDataStream(API_KEY, API_SEC, feed="iex")
+    stream = StockDataStream(API_KEY, API_SEC, feed=DataFeed.IEX)
     stream.subscribe_quotes(quote_handler, *SYMBOLS)
     stream.run()  # blocking
 
