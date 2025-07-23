@@ -74,6 +74,7 @@ services:
       - AWS_REGION=us-east-1
     volumes:
       - /home/trader/.aws:/root/.aws:ro
+    restart: unless-stopped
 
   # ---------- Market-data WebSocket Service ----------
   md_ws:
