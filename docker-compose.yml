@@ -135,6 +135,24 @@ services:
       - /home/trader/.aws:/root/.aws:ro
     restart: unless-stopped
 
+  # ---------- News & Sentiment Stream ----------
+  news_stream:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command:
+      - "python"
+      - "-m"
+      - "ingest.news_stream"
+    depends_on:
+      - feature_store
+    env_file: .env.compose
+    environment:
+      - AWS_REGION=us-east-1
+    volumes:
+      - /home/trader/.aws:/root/.aws:ro
+    restart: unless-stopped
+
 volumes:
   pg_data:
   grafana_data:
