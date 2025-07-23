@@ -1,4 +1,6 @@
 import os
+from decimal import Decimal
+
 import asyncpg
 from alpaca.data.live import StockDataStream
 from ops.secret_loader import load_secrets
@@ -19,32 +21,43 @@ INSERT_SQL = """
     ON CONFLICT DO NOTHING
 """
 
-async def quote_handler(q):
-    """Called by Alpaca on each quote update—logs + writes to Postgres."""
+async def _ensure_pool():
     global _pg_pool
     if _pg_pool is None:
         _pg_pool = await asyncpg.create_pool(DB_DSN, min_size=1, max_size=4)
 
+async def quote_handler(q):
+    """Called by Alpaca on each quote update—logs + writes to Postgres."""
+    await _ensure_pool()
+
+    bid = Decimal(str(q.bid_price))
+    ask = Decimal(str(q.ask_price))
+    mid = (bid + ask) / 2
+    size = (q.bid_size or 0) + (q.ask_size or 0)
+
     # log it so we know it’s alive
-    print(f"[QUOTE] {q.symbol} @ {q.timestamp}  bid={q.bid_price}  ask={q.ask_price}  last={q.last_price}", flush=True)
+    print(f"[QUOTE] {q.symbol} @ {q.timestamp}  bid={bid}  ask={ask}  mid={mid}  size={size}", flush=True)
 
     async with _pg_pool.acquire() as conn:
         await conn.execute(
             INSERT_SQL,
             q.timestamp,
             q.symbol,
-            q.bid_price,
-            q.ask_price,
-            q.last_price,
-            q.size,
+            bid,
+            ask,
+            mid,
+            size,
         )
 
 # ─── 3. Subscribe & run ─────────────────────────────────────────────────────────
 def main():
     print(f"→ market_ws starting, subscribing to {SYMBOLS}", flush=True)
-    stream = StockDataStream(API_KEY, API_SEC)
+    stream = StockDataStream(API_KEY, API_SEC, feed="iex")
     stream.subscribe_quotes(quote_handler, *SYMBOLS)
     stream.run()  # blocking
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("market_ws stopped")
