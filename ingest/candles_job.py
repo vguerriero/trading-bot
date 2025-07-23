@@ -8,9 +8,8 @@ from datetime import date, timedelta
 import alpaca_trade_api as tradeapi
 from ops.secret_loader import load_secrets
 
-
 async def store(df: pd.DataFrame, pool: asyncpg.Pool) -> None:
-    """Bulk‑upsert a DataFrame of daily bars into the candles table."""
+    """Bulk-upsert a DataFrame of daily bars into the candles table."""
     sql = """
     INSERT INTO candles(date, symbol, open, high, low, close, volume)
     VALUES($1,$2,$3,$4,$5,$6,$7)
@@ -30,9 +29,8 @@ async def store(df: pd.DataFrame, pool: asyncpg.Pool) -> None:
             ],
         )
 
-
 async def run() -> None:
-    """Back‑fill (or refresh) 1‑day candles for the configured symbol universe."""
+    """Back-fill (or refresh) 1-day candles for the configured symbol universe."""
     load_secrets()  # pulls ALPACA_PAPER_KEY / _SECRET from SSM → env
 
     key = os.getenv("ALPACA_PAPER_KEY")
@@ -43,11 +41,13 @@ async def run() -> None:
             "check secret_loader & AWS creds."
         )
 
+    # Initialize REST client with IEX feed for free historical bars
     api = tradeapi.REST(
         key_id=key,
         secret_key=sec,
         base_url="https://paper-api.alpaca.markets",
         api_version="v2",
+        data_feed="iex",
     )
 
     symbols = os.getenv("SYMBOL_UNIVERSE", "AAPL,MSFT,NVDA,AMD").split(",")
@@ -70,6 +70,7 @@ async def run() -> None:
                 end=end.isoformat(),
                 limit=None,         # full range
                 adjustment="raw",
+                feed="iex",         # enforce IEX feed
             ).df
         except Exception as exc:
             print(f"❌ {sym}: {exc}", flush=True)
@@ -80,7 +81,7 @@ async def run() -> None:
             continue
 
         df = barset.reset_index()
-        df.rename(columns={df.columns[0]: "date"}, inplace=True)  # first col is timestamp
+        df.rename(columns={df.columns[0]: "date"}, inplace=True)  # timestamp → date
         df["symbol"] = sym
         df = df[["date", "symbol", "open", "high", "low", "close", "volume"]]
 
@@ -88,7 +89,7 @@ async def run() -> None:
         print(f"✅ Stored {len(df):,} rows for {sym}", flush=True)
 
     await pool.close()
-    print("🏁 Candle back‑fill complete", flush=True)
+    print("🏁 Candle back-fill complete", flush=True)
 
 
 if __name__ == "__main__":
