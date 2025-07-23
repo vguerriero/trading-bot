@@ -1,5 +1,4 @@
-# ingest/news_stream.py  (robust NLTK version)
-
+# ingest/news_stream.py
 import os, re, asyncio, asyncpg, requests, nltk
 from datetime import datetime, timezone
 from nltk.sentiment.vader import SentimentIntensityAnalyzer
@@ -13,7 +12,8 @@ load_secrets()  # loads NEWSDATA_API_KEY → env
 DB  = "postgresql://trader:trader_pw@feature_store:5432/trading"
 API = (
     f"https://newsdata.io/api/1/news?apikey={os.environ['NEWSDATA_API_KEY']}"
-    "&language=en&domain=seekingalpha.com,finance.yahoo.com"
+    "&language=en"
+    # removed domain filter
 )
 
 SQL = """INSERT INTO news(ts,source,headline,symbol,sentiment,url)
@@ -27,7 +27,7 @@ async def store(pool, row):
 def parse_date(s):
     try:
         return datetime.fromisoformat(s).replace(tzinfo=timezone.utc)
-    except Exception:
+    except:
         return datetime.utcnow().replace(tzinfo=timezone.utc)
 
 async def stream():
@@ -37,23 +37,23 @@ async def stream():
     while True:
         try:
             js = requests.get(API, timeout=30).json()
-            for art in js.get("results", []):
-                if not isinstance(art, dict):
-                    continue  # skip unexpected strings/objects
+            results = js.get("results", [])
+            print(f"🔄 Fetched {len(results)} articles", flush=True)
+            for art in results:
+                if not isinstance(art, dict): continue
+                title = art.get("title") or ""
+                if not title: continue
 
-                head = art.get("title") or ""
-                if not head:
-                    continue
+                ts    = parse_date(art.get("pubDate",""))
+                src   = art.get("source_id","newsdata")
+                syms  = list({m for m in TICKER_RE.findall(title)})
+                score = sia.polarity_scores(title)["compound"]
+                url   = art.get("link","")
 
-                ts     = parse_date(art.get("pubDate", ""))
-                src    = art.get("source_id", "newsdata")
-                syms   = list({m for m in TICKER_RE.findall(head)})
-                score  = round(sia.polarity_scores(head)["compound"], 4)
-                url    = art.get("link", "")
-
-                await store(pool, (ts, src, head, syms, score, url))
+                await store(pool, (ts, src, title, syms, round(score,4), url))
+            print("✅ Batch stored", flush=True)
         except Exception as e:
-            print(f"⚠️  news_stream error: {e}", flush=True)
+            print(f"⚠️  Error: {e}", flush=True)
 
         await asyncio.sleep(60)
 
