@@ -31,23 +31,19 @@ async def store(df: pd.DataFrame, pool: asyncpg.Pool) -> None:
 
 async def run() -> None:
     """Back-fill (or refresh) 1-day candles for the configured symbol universe."""
-    load_secrets()  # pulls ALPACA_PAPER_KEY / _SECRET from SSM → env
+    load_secrets()  # pulls ALPACA_PAPER_KEY / _SECRET into env
 
     key = os.getenv("ALPACA_PAPER_KEY")
     sec = os.getenv("ALPACA_PAPER_SECRET")
     if not key or not sec:
-        raise RuntimeError(
-            "ALPACA_PAPER_KEY / ALPACA_PAPER_SECRET env vars missing – "
-            "check secret_loader & AWS creds."
-        )
+        raise RuntimeError("Missing ALPACA_PAPER_KEY / ALPACA_PAPER_SECRET")
 
-    # Initialize REST client with IEX feed for free historical bars
+    # Initialize REST client (no data_feed arg here)
     api = tradeapi.REST(
         key_id=key,
         secret_key=sec,
         base_url="https://paper-api.alpaca.markets",
         api_version="v2",
-        data_feed="iex",
     )
 
     symbols = os.getenv("SYMBOL_UNIVERSE", "AAPL,MSFT,NVDA,AMD").split(",")
@@ -68,9 +64,9 @@ async def run() -> None:
                 "1Day",
                 start=start.isoformat(),
                 end=end.isoformat(),
-                limit=None,         # full range
+                limit=None,
                 adjustment="raw",
-                feed="iex",         # enforce IEX feed
+                feed="iex",         # ensure free IEX data
             ).df
         except Exception as exc:
             print(f"❌ {sym}: {exc}", flush=True)
@@ -81,7 +77,7 @@ async def run() -> None:
             continue
 
         df = barset.reset_index()
-        df.rename(columns={df.columns[0]: "date"}, inplace=True)  # timestamp → date
+        df.rename(columns={df.columns[0]: "date"}, inplace=True)
         df["symbol"] = sym
         df = df[["date", "symbol", "open", "high", "low", "close", "volume"]]
 
@@ -90,7 +86,6 @@ async def run() -> None:
 
     await pool.close()
     print("🏁 Candle back-fill complete", flush=True)
-
 
 if __name__ == "__main__":
     asyncio.run(run())
