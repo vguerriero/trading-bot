@@ -23,19 +23,19 @@ load_secrets()  # pulls SEC_API_KEY into env
 
 def filings(symbol: str) -> list[dict]:
     """Return up to 5 of the most recent 10-K/Q filing metadata dicts for a ticker."""
-    q = {
+    payload = {
         "query": {
             "query_string": {
-                "query": f'ticker:{symbol} AND formType:(\"10-K\",\"10-Q\")'
+                "query": f'ticker:{symbol} AND formType:("10-K","10-Q")'
             }
         },
         "from": 0,
         "size": 5,
-        "sort": [{"filedAt": {"order": "desc"}}]
+        "sort": [{"filedAt": {"order": "desc"}}],
     }
     params = {
         "token": os.environ["SEC_API_KEY"],
-        "query": json.dumps(q, separators=(",", ":"))
+        "query": json.dumps(payload, separators=(",", ":")),
     }
     resp = requests.get(API, params=params, timeout=30)
     resp.raise_for_status()
