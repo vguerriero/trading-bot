@@ -1,29 +1,27 @@
-# ingest/news_stream.py
-import os, re, time, asyncio, asyncpg, requests
+# ingest/news_stream.py  (N L T K version, no torch/transformers)
+
+import os, re, asyncio, asyncpg, requests, nltk
 from datetime import datetime, timezone
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
+from nltk.sentiment.vader import SentimentIntensityAnalyzer
 from ops.secret_loader import load_secrets
 
-# ── Init ───────────────────────────────────────────────────────────────
-load_secrets()                                   # loads NEWSDATA_API_KEY → env
-tok = AutoTokenizer.from_pretrained(
-    "cardiffnlp/twitter-roberta-base-sentiment-latest"
-)
-mdl = AutoModelForSequenceClassification.from_pretrained(
-    "cardiffnlp/twitter-roberta-base-sentiment-latest"
-)
+# download the VADER lexicon once inside the container
+nltk.download("vader_lexicon", quiet=True)
+sia = SentimentIntensityAnalyzer()
+
+load_secrets()  # NEWSDATA_API_KEY → env
 
 DB  = "postgresql://trader:trader_pw@feature_store:5432/trading"
-API = f"https://newsdata.io/api/1/news?apikey={os.environ['NEWSDATA_API_KEY']}" \
-      "&language=en&domain=seekingalpha.com,finance.yahoo.com"
-
-TICKER_RE = re.compile(r"\b[A-Z]{2,5}\b")        # naïve ticker scrape
+API = (
+    f"https://newsdata.io/api/1/news?apikey={os.environ['NEWSDATA_API_KEY']}"
+    "&language=en&domain=seekingalpha.com,finance.yahoo.com"
+)
 
 SQL = """INSERT INTO news(ts,source,headline,symbol,sentiment,url)
-         VALUES($1,$2,$3,$4,$5,$6)
-         ON CONFLICT DO NOTHING"""
+         VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING"""
 
-# ── Main loop ───────────────────────────────────────────────────────────
+TICKER = re.compile(r"\b[A-Z]{2,5}\b")
+
 async def store(pool, row):
     await pool.execute(SQL, *row)
 
@@ -32,27 +30,16 @@ async def stream():
     print("📰 news_stream started", flush=True)
 
     while True:
-        try:
-            js = requests.get(API, timeout=30).json()
-            for art in js.get("results", []):
-                headline = art["title"] or ""
-                symbols  = list({s for s in TICKER_RE.findall(headline) if len(s) <= 5})
-                inputs   = tok(headline, return_tensors="pt", truncation=True)
-                score    = mdl(**inputs).logits.softmax(-1)[0][2].item()  # Positive prob
+        js = requests.get(API, timeout=30).json()
+        for art in js.get("results", []):
+            ts   = datetime.fromisoformat(art["pubDate"]).replace(tzinfo=timezone.utc)
+            head = art["title"] or ""
+            syms = list({s for s in TICKER.findall(head)})
+            score = sia.polarity_scores(head)["compound"]  # –1 … +1
 
-                row = (
-                    datetime.fromisoformat(art["pubDate"]).replace(tzinfo=timezone.utc),
-                    art["source_id"],
-                    headline,
-                    symbols,                  # TEXT[] column
-                    round(score, 4),
-                    art["link"],
-                )
-                await store(pool, row)
-            await asyncio.sleep(60)
-        except Exception as e:
-            print(f"⚠️  news_stream error: {e}", flush=True)
-            await asyncio.sleep(30)
+            row = (ts, art["source_id"], head, syms, round(score, 4), art["link"])
+            await store(pool, row)
+        await asyncio.sleep(60)
 
 if __name__ == "__main__":
     asyncio.run(stream())
