@@ -153,6 +153,20 @@ services:
       - /home/trader/.aws:/root/.aws:ro
     restart: unless-stopped
 
+  # ---------- Google Trends Cron ----------
+  trends_cron:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command:
+      - "bash"
+      - "-c"
+      - "while sleep 86400; do python -m ingest.trends_job; done"
+    depends_on:
+      - feature_store
+    env_file: .env.compose
+    restart: unless-stopped
+
 volumes:
   pg_data:
   grafana_data:

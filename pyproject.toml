@@ -20,6 +20,7 @@ dependencies = [
     "requests-cache (>=1.2.1,<2.0.0)",
     "arelle (>=2.2,<3.0)",
     "nltk (>=3.9.1,<4.0.0)",
+    "pytrends (>=4.9.2,<5.0.0)",
 ]
 
 
