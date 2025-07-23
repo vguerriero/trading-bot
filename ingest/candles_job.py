@@ -21,7 +21,7 @@ async def run():
     load_secrets()
 
     # initialize Alpaca REST client with paper-trading credentials
-    key = os.environ["ALPACA_PAPER_KEY"]
+    key    = os.environ["ALPACA_PAPER_KEY"]
     secret = os.environ["ALPACA_PAPER_SECRET"]
     base_url = "https://paper-api.alpaca.markets"
     api = tradeapi.REST(key, secret, base_url)
@@ -35,7 +35,19 @@ async def run():
     )
 
     for sym in symbols:
-        barset = api.get_bars(sym, "1Day", start=start, end=end).df
+        try:
+            # use 'iex' feed to stay within Basic plan limits
+            barset = api.get_bars(
+                sym,
+                "1Day",
+                start=start,
+                end=end,
+                feed="iex"
+            ).df
+        except tradeapi.rest.APIError as e:
+            print(f"[ERROR] fetching bars for {sym}: {e}", flush=True)
+            continue
+
         barset["symbol"] = sym
         barset.rename(
             columns={
