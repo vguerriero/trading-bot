@@ -116,6 +116,25 @@ services:
       - /home/trader/.aws:/root/.aws:ro
     restart: unless-stopped
 
+  # ---------- SEC Fundamentals Fetcher ----------
+  sec_fund:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command:
+      - "bash"
+      - "-c"
+      - "while sleep 604800; do python -m ingest.sec_fund; done"
+    depends_on:
+      - feature_store
+    env_file: .env.compose
+    environment:
+      - SYMBOL_UNIVERSE=AAPL,MSFT,NVDA,AMD
+      - AWS_REGION=us-east-1
+    volumes:
+      - /home/trader/.aws:/root/.aws:ro
+    restart: unless-stopped
+
 volumes:
   pg_data:
   grafana_data:
