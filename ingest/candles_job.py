@@ -28,7 +28,16 @@ async def store(df: pd.DataFrame, pool: asyncpg.Pool):
 
 async def run():
     load_secrets()
-    api = tradeapi.REST()  # reads ALPACA_PAPER_KEY/SECRET from env
+
+    # map secrets to alpaca_trade_api env vars
+    os.environ["APCA_API_KEY_ID"]     = os.environ["ALPACA_PAPER_KEY"]
+    os.environ["APCA_API_SECRET_KEY"] = os.environ["ALPACA_PAPER_SECRET"]
+    os.environ.setdefault(
+        "APCA_API_BASE_URL",
+        "https://paper-api.alpaca.markets"
+    )
+
+    api = tradeapi.REST()  # now picks up APCA_API_KEY_ID/SECRET
     symbols = os.getenv("SYMBOL_UNIVERSE", "AAPL,MSFT,NVDA,AMD").split(",")
     end = date.today()
     start = end - timedelta(days=365*5)
@@ -55,8 +64,7 @@ async def run():
             continue
 
         df = barset.reset_index()
-        # after reset_index, the first column is the timestamp index
-        idx_col = df.columns[0]
+        idx_col = df.columns[0]  # timestamp column
         df.rename(columns={idx_col: "date"}, inplace=True)
         df["symbol"] = sym
         df = df[["date", "symbol", "open", "high", "low", "close", "volume"]]
