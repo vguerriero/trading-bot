@@ -8,16 +8,16 @@ from datetime import date, timedelta
 import alpaca_trade_api as tradeapi
 from ops.secret_loader import load_secrets
 
-async def store(df, pool):
+async def store(df: pd.DataFrame, pool: asyncpg.Pool):
     sql = """
     INSERT INTO candles(date, symbol, open, high, low, close, volume)
     VALUES($1, $2, $3, $4, $5, $6, $7)
     ON CONFLICT (date, symbol) DO UPDATE
-      SET open=EXCLUDED.open,
-          high=EXCLUDED.high,
-          low=EXCLUDED.low,
-          close=EXCLUDED.close,
-          volume=EXCLUDED.volume;
+      SET open      = EXCLUDED.open,
+          high      = EXCLUDED.high,
+          low       = EXCLUDED.low,
+          close     = EXCLUDED.close,
+          volume    = EXCLUDED.volume;
     """
     async with pool.acquire() as conn:
         records = [
@@ -28,10 +28,10 @@ async def store(df, pool):
 
 async def run():
     load_secrets()
-    api = tradeapi.REST()  # reads ALPACA_PAPER_KEY / SECRET from env
+    api = tradeapi.REST()  # reads ALPACA_PAPER_KEY/SECRET from env
     symbols = os.getenv("SYMBOL_UNIVERSE", "AAPL,MSFT,NVDA,AMD").split(",")
     end = date.today()
-    start = end - timedelta(days=365*5)  # last 5 years
+    start = end - timedelta(days=365*5)
 
     pool = await asyncpg.create_pool(
         "postgresql://trader:trader_pw@feature_store:5432/trading",
@@ -39,18 +39,27 @@ async def run():
     )
 
     for sym in symbols:
-        barset = api.get_bars(sym, "1Day",
-                              start=start.isoformat(),
-                              end=end.isoformat()).df
-        if barset.empty:
+        print(f"▶️ Fetching {sym} from {start} to {end}", flush=True)
+        try:
+            barset = api.get_bars(
+                sym, "1Day",
+                start=start.isoformat(),
+                end=end.isoformat()
+            ).df
+        except Exception as e:
+            print(f"❌ Error fetching {sym}: {e}", flush=True)
             continue
 
-        barset["symbol"] = sym
-        barset.rename(columns={
-            "t": "date", "o": "open", "h": "high",
-            "l": "low", "c": "close", "v": "volume"
-        }, inplace=True)
-        df = barset[["date","symbol","open","high","low","close","volume"]]
+        if barset.empty:
+            print(f"⚠️ No data for {sym}", flush=True)
+            continue
+
+        df = barset.reset_index()
+        # after reset_index, the first column is the timestamp index
+        idx_col = df.columns[0]
+        df.rename(columns={idx_col: "date"}, inplace=True)
+        df["symbol"] = sym
+        df = df[["date", "symbol", "open", "high", "low", "close", "volume"]]
 
         await store(df, pool)
 
